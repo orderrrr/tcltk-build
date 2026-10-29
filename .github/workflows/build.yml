@@ -1,0 +1,86 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Linux and Windows are cross-compiled with Zig on Linux. Aqua Tk's configure only enables
+  # Aqua on a Darwin host, so macOS builds natively. Tests then run natively per OS.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-24.04
+          - target: macos-aarch64
+            os: macos-14
+          - target: windows-x86_64
+            os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
+      - name: Build
+        run: mkdir -p build && ./build.sh "${{ matrix.target }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tcltk-${{ matrix.target }}
+          path: dist/*.tar.gz
+
+  test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-22.04
+          - target: macos-aarch64
+            os: macos-14
+          - target: windows-x86_64
+            os: windows-2022
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tcltk-${{ matrix.target }}
+          path: dist
+
+      - name: Install Xvfb and Xft
+        if: matrix.target == 'linux-x86_64'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libxft2
+
+      - name: wish loads its libraries and Tk
+        run: |
+          tar -xzf "dist/tcltk-${{ matrix.target }}.tar.gz" -C dist
+          ./test.sh "${{ matrix.target }}"
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "Tcl/Tk 8.6.18 wish with its script libraries, built with Zig 0.17.0."
+        env:
+          GH_TOKEN: ${{ github.token }}
