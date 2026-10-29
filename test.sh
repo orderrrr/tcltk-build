@@ -33,7 +33,10 @@ if {$tcl_platform(platform) eq "windows"} {package require registry; puts $f reg
 close $f
 exit
 EOF
-env -u TCL_LIBRARY -u TK_LIBRARY timeout 30 ${run[@]+"${run[@]}"} "$wish" build/probe.tcl
+# macOS runners have no coreutils `timeout`; perl's alarm does the same job.
+limit=(timeout 30)
+command -v timeout >/dev/null || limit=(perl -e 'alarm shift; exec @ARGV' 30)
+env -u TCL_LIBRARY -u TK_LIBRARY "${limit[@]}" ${run[@]+"${run[@]}"} "$wish" build/probe.tcl
 cat build/probe.out
 version=$(sed -n 's/^tcl //p' "$pkg/VERSION")
 grep -qx "$version $expected" build/probe.out

@@ -143,4 +143,5 @@ cp "$tcl_src/license.terms" "$pkg/licenses/tcl.txt"
 cp "$tk_src/license.terms" "$pkg/licenses/tk.txt"
 printf 'tcl %s\ntk %s\nzig %s %s\n' "$version" "$version" "$(zig version)" "$zig_target" > "$pkg/VERSION"
 
-tar -czf "dist/$name.tar.gz" -C dist "$name"
+# COPYFILE_DISABLE keeps macOS tar from adding AppleDouble `._*` files.
+COPYFILE_DISABLE=1 tar -czf "dist/$name.tar.gz" -C dist "$name"
